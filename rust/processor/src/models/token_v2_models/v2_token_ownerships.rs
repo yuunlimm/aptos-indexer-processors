@@ -112,7 +112,7 @@ impl TokenOwnershipV2 {
     /// For nfts it's the same resources that we parse tokendatas from so we leverage the work done in there to get ownership data
     pub fn get_nft_v2_from_token_data(
         token_data: &TokenDataV2,
-        token_v2_metadata: &ObjectAggregatedDataMapping,
+        object_metadatas: &ObjectAggregatedDataMapping,
     ) -> anyhow::Result<
         Option<(
             Self,
@@ -125,10 +125,10 @@ impl TokenOwnershipV2 {
         if token_data.is_fungible_v2 != Some(false) {
             return Ok(None);
         }
-        let metadata = token_v2_metadata
+        let object_data = object_metadatas
             .get(&token_data.token_data_id)
             .context("If token data exists objectcore must exist")?;
-        let object_core = metadata.object.object_core.clone();
+        let object_core = object_data.object.object_core.clone();
         let token_data_id = token_data.token_data_id.clone();
         let owner_address = object_core.get_owner_address();
         let storage_id = token_data_id.clone();
@@ -167,7 +167,7 @@ impl TokenOwnershipV2 {
         };
 
         // check if token was transferred
-        if let Some((event_index, transfer_event)) = &metadata.transfer_event {
+        if let Some((event_index, transfer_event)) = &object_data.transfer_event {
             // If it's a self transfer then skip
             if transfer_event.get_to_address() == transfer_event.get_from_address() {
                 return Ok(Some((ownership, current_ownership, None, None)));
@@ -360,7 +360,7 @@ impl TokenOwnershipV2 {
         txn_version: i64,
         write_set_change_index: i64,
         txn_timestamp: chrono::NaiveDateTime,
-        token_v2_metadata: &ObjectAggregatedDataMapping,
+        object_metadatas: &ObjectAggregatedDataMapping,
         conn: &mut PgPoolConnection<'_>,
     ) -> anyhow::Result<Option<(Self, CurrentTokenOwnershipV2)>> {
         let type_str = MoveResource::get_outer_type_from_resource(write_resource);
@@ -381,14 +381,14 @@ impl TokenOwnershipV2 {
                 txn_version,
             )?
         {
-            if let Some(metadata) = token_v2_metadata.get(&resource.address) {
-                let object_core = &metadata.object.object_core;
+            if let Some(object_data) = object_metadatas.get(&resource.address) {
+                let object_core = &object_data.object.object_core;
                 let token_data_id = inner.metadata.get_reference_address();
                 // Exit early if it's not a token
                 if !TokenDataV2::is_address_fungible_token(
                     conn,
                     &token_data_id,
-                    token_v2_metadata,
+                    object_metadatas,
                     txn_version,
                 )
                 .await
