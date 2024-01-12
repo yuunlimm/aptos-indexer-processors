@@ -169,6 +169,13 @@ impl TokenActivityV2 {
                         before_value: None,
                         after_value: None,
                     },
+                    V2TokenEvent::ConcurrentMintEvent(_) => TokenActivityHelperV2 {
+                        from_address: Some(object_core.get_owner_address()),
+                        to_address: None,
+                        token_amount: BigDecimal::one(),
+                        before_value: None,
+                        after_value: None,
+                    },
                     V2TokenEvent::TokenMutationEvent(inner) => TokenActivityHelperV2 {
                         from_address: Some(object_core.get_owner_address()),
                         to_address: None,
@@ -177,6 +184,13 @@ impl TokenActivityV2 {
                         after_value: Some(inner.new_value.clone()),
                     },
                     V2TokenEvent::BurnEvent(_) => TokenActivityHelperV2 {
+                        from_address: Some(object_core.get_owner_address()),
+                        to_address: None,
+                        token_amount: BigDecimal::one(),
+                        before_value: None,
+                        after_value: None,
+                    },
+                    V2TokenEvent::ConcurrentBurnEvent(_) => TokenActivityHelperV2 {
                         from_address: Some(object_core.get_owner_address()),
                         to_address: None,
                         token_amount: BigDecimal::one(),

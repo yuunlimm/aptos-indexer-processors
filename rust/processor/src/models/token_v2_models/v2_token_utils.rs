@@ -50,6 +50,7 @@ pub struct TokenV2AggregatedData {
     pub token: Option<TokenV2>,
     pub transfer_event: Option<(EventIndex, TransferEvent)>,
     pub unlimited_supply: Option<UnlimitedSupply>,
+    pub concurrent_supply: Option<ConcurrentSupply>,
 }
 
 /// Tracks which token standard a token / collection is built upon
@@ -304,6 +305,40 @@ impl UnlimitedSupply {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ConcurrentSupply {
+    #[serde(deserialize_with = "deserialize_from_string")]
+    pub current_supply: BigDecimal,
+    #[serde(deserialize_with = "deserialize_from_string")]
+    pub total_minted: BigDecimal,
+}
+
+impl ConcurrentSupply {
+    pub fn from_write_resource(
+        write_resource: &WriteResource,
+        txn_version: i64,
+    ) -> anyhow::Result<Option<Self>> {
+        let type_str = MoveResource::get_outer_type_from_resource(write_resource);
+        if !V2TokenResource::is_resource_supported(type_str.as_str()) {
+            return Ok(None);
+        }
+        let resource = MoveResource::from_write_resource(
+            write_resource,
+            0, // Placeholder, this isn't used anyway
+            txn_version,
+            0, // Placeholder, this isn't used anyway
+        );
+
+        if let V2TokenResource::ConcurrentSupply(inner) =
+            V2TokenResource::from_resource(&type_str, resource.data.as_ref().unwrap(), txn_version)?
+        {
+            Ok(Some(inner))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
 /* Section on Events */
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MintEvent {
@@ -313,6 +348,20 @@ pub struct MintEvent {
 }
 
 impl MintEvent {
+    pub fn get_token_address(&self) -> String {
+        standardize_address(&self.token)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ConcurrentMintEvent {
+    collection_addr: String,
+    #[serde(deserialize_with = "deserialize_from_string")]
+    pub index: BigDecimal,
+    token: String,
+}
+
+impl ConcurrentMintEvent {
     pub fn get_token_address(&self) -> String {
         standardize_address(&self.token)
     }
@@ -335,6 +384,30 @@ pub struct BurnEvent {
 impl BurnEvent {
     pub fn from_event(event: &Event, txn_version: i64) -> anyhow::Result<Option<Self>> {
         if let Some(V2TokenEvent::BurnEvent(inner)) =
+            V2TokenEvent::from_event(event.type_str.as_str(), &event.data, txn_version).unwrap()
+        {
+            Ok(Some(inner))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn get_token_address(&self) -> String {
+        standardize_address(&self.token)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ConcurrentBurnEvent {
+    collection_addr: String,
+    #[serde(deserialize_with = "deserialize_from_string")]
+    pub index: BigDecimal,
+    token: String,
+}
+
+impl ConcurrentBurnEvent {
+    pub fn from_event(event: &Event, txn_version: i64) -> anyhow::Result<Option<Self>> {
+        if let Some(V2TokenEvent::ConcurrentBurnEvent(inner)) =
             V2TokenEvent::from_event(event.type_str.as_str(), &event.data, txn_version).unwrap()
         {
             Ok(Some(inner))
@@ -413,14 +486,56 @@ impl PropertyMapModel {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AggregatorSnapshot<T> {
+    // TODO: #[serde(deserialize_with = "deserialize_from_string")] is showing error
+    value: T,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ConcurrentTokenIdentifiers {
+    // TODO: #[serde(deserialize_with = "deserialize_from_string")] is showing error
+    index: AggregatorSnapshot<u64>,
+    // TODO: #[serde(deserialize_with = "deserialize_from_string")] is showing error
+    name: AggregatorSnapshot<String>,
+}
+
+impl ConcurrentTokenIdentifiers {
+    pub fn from_write_resource(
+        write_resource: &WriteResource,
+        txn_version: i64,
+    ) -> anyhow::Result<Option<Self>> {
+        let type_str = MoveResource::get_outer_type_from_resource(write_resource);
+        if !V2TokenResource::is_resource_supported(type_str.as_str()) {
+            return Ok(None);
+        }
+        let resource = MoveResource::from_write_resource(
+            write_resource,
+            0, // Placeholder, this isn't used anyway
+            txn_version,
+            0, // Placeholder, this isn't used anyway
+        );
+
+        if let V2TokenResource::ConcurrentTokenIdentifiers(inner) =
+            V2TokenResource::from_resource(&type_str, resource.data.as_ref().unwrap(), txn_version)?
+        {
+            Ok(Some(inner))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum V2TokenResource {
     AptosCollection(AptosCollection),
     Collection(Collection),
+    ConcurrentSupply(ConcurrentSupply),
     FixedSupply(FixedSupply),
     ObjectCore(ObjectCore),
     UnlimitedSupply(UnlimitedSupply),
     TokenV2(TokenV2),
     PropertyMapModel(PropertyMapModel),
+    ConcurrentTokenIdentifiers(ConcurrentTokenIdentifiers),
 }
 
 impl V2TokenResource {
@@ -428,11 +543,13 @@ impl V2TokenResource {
         [
             format!("{}::object::ObjectCore", COIN_ADDR),
             format!("{}::collection::Collection", TOKEN_V2_ADDR),
+            format!("{}::collection::ConcurrentSupply", TOKEN_V2_ADDR),
             format!("{}::collection::FixedSupply", TOKEN_V2_ADDR),
             format!("{}::collection::UnlimitedSupply", TOKEN_V2_ADDR),
             format!("{}::aptos_token::AptosCollection", TOKEN_V2_ADDR),
             format!("{}::token::Token", TOKEN_V2_ADDR),
             format!("{}::property_map::PropertyMap", TOKEN_V2_ADDR),
+            format!("{}::token::ConcurrentTokenIdentifiers", TOKEN_V2_ADDR),
         ]
         .contains(&data_type.to_string())
     }
@@ -449,6 +566,10 @@ impl V2TokenResource {
             x if x == format!("{}::collection::Collection", TOKEN_V2_ADDR) => {
                 serde_json::from_value(data.clone()).map(|inner| Some(Self::Collection(inner)))
             },
+            x if x == format!("{}::collection::ConcurrentSupply", TOKEN_V2_ADDR) => {
+                serde_json::from_value(data.clone())
+                    .map(|inner| Some(Self::ConcurrentSupply(inner)))
+            },
             x if x == format!("{}::collection::FixedSupply", TOKEN_V2_ADDR) => {
                 serde_json::from_value(data.clone()).map(|inner| Some(Self::FixedSupply(inner)))
             },
@@ -460,6 +581,10 @@ impl V2TokenResource {
             },
             x if x == format!("{}::token::Token", TOKEN_V2_ADDR) => {
                 serde_json::from_value(data.clone()).map(|inner| Some(Self::TokenV2(inner)))
+            },
+            x if x == format!("{}::token::ConcurrentTokenIdentifiers", TOKEN_V2_ADDR) => {
+                serde_json::from_value(data.clone())
+                    .map(|inner| Some(Self::ConcurrentTokenIdentifiers(inner)))
             },
             x if x == format!("{}::property_map::PropertyMap", TOKEN_V2_ADDR) => {
                 serde_json::from_value(data.clone())
@@ -480,8 +605,10 @@ impl V2TokenResource {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum V2TokenEvent {
+    ConcurrentMintEvent(ConcurrentMintEvent),
     MintEvent(MintEvent),
     TokenMutationEvent(TokenMutationEvent),
+    ConcurrentBurnEvent(ConcurrentBurnEvent),
     BurnEvent(BurnEvent),
     TransferEvent(TransferEvent),
 }
@@ -489,11 +616,17 @@ pub enum V2TokenEvent {
 impl V2TokenEvent {
     pub fn from_event(data_type: &str, data: &str, txn_version: i64) -> Result<Option<Self>> {
         match data_type {
+            "0x4::collection::ConcurrentMintEvent" => {
+                serde_json::from_str(data).map(|inner| Some(Self::ConcurrentMintEvent(inner)))
+            },
             "0x4::collection::MintEvent" => {
                 serde_json::from_str(data).map(|inner| Some(Self::MintEvent(inner)))
             },
             "0x4::token::MutationEvent" => {
                 serde_json::from_str(data).map(|inner| Some(Self::TokenMutationEvent(inner)))
+            },
+            "0x4::collection::ConcurrentBurnEvent" => {
+                serde_json::from_str(data).map(|inner| Some(Self::ConcurrentBurnEvent(inner)))
             },
             "0x4::collection::BurnEvent" => {
                 serde_json::from_str(data).map(|inner| Some(Self::BurnEvent(inner)))

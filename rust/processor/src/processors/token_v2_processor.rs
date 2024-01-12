@@ -536,6 +536,7 @@ async fn parse_v2_token(
                                 fixed_supply: None,
                                 object,
                                 unlimited_supply: None,
+                                concurrent_supply: None,
                                 property_map: None,
                                 transfer_event: None,
                                 token: None,

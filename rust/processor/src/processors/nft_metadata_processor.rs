@@ -214,6 +214,7 @@ async fn parse_v2_token(
                             aptos_collection: None,
                             fixed_supply: None,
                             object,
+                            concurrent_supply: None,
                             unlimited_supply: None,
                             property_map: None,
                             transfer_event: None,
