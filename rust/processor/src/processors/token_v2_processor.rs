@@ -18,9 +18,9 @@ use crate::{
                 TokenOwnershipV2,
             },
             v2_token_utils::{
-                AptosCollection, BurnEvent, FixedSupply, ObjectWithMetadata, PropertyMapModel,
-                TokenV2, TokenV2AggregatedData, TokenV2AggregatedDataMapping, TokenV2Burned,
-                TransferEvent, UnlimitedSupply,
+                AptosCollection, BurnEvent, ConcurrentSupply, FixedSupply, ObjectWithMetadata,
+                PropertyMapModel, TokenV2, TokenV2AggregatedData, TokenV2AggregatedDataMapping,
+                TokenV2Burned, TransferEvent, UnlimitedSupply,
             },
         },
     },
@@ -573,6 +573,11 @@ async fn parse_v2_token(
                             PropertyMapModel::from_write_resource(wr, txn_version).unwrap()
                         {
                             aggregated_data.property_map = Some(property_map);
+                        }
+                        if let Some(concurrent_supply) =
+                            ConcurrentSupply::from_write_resource(wr, txn_version).unwrap()
+                        {
+                            aggregated_data.concurrent_supply = Some(concurrent_supply);
                         }
                         if let Some(token) = TokenV2::from_write_resource(wr, txn_version).unwrap()
                         {

@@ -216,7 +216,17 @@ impl TokenV2 {
         if let V2TokenResource::TokenV2(inner) =
             V2TokenResource::from_resource(&type_str, resource.data.as_ref().unwrap(), txn_version)?
         {
-            Ok(Some(inner))
+            if let Some(concurrent_token_identifiers) =
+                ConcurrentTokenIdentifiers::from_write_resource(write_resource, txn_version)
+                    .unwrap()
+            {
+                Ok(Some(TokenV2 {
+                    name: concurrent_token_identifiers.name.value,
+                    ..inner
+                }))
+            } else {
+                Ok(Some(inner))
+            }
         } else {
             Ok(None)
         }
