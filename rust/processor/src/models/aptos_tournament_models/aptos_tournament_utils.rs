@@ -691,6 +691,7 @@ impl RPSResultEvent {
 pub struct CreateRoomEvent {
     tournament_address: String,
     current_round_address: String,
+    object_address: String,
 }
 
 impl CreateRoomEvent {
@@ -700,6 +701,10 @@ impl CreateRoomEvent {
 
     pub fn get_current_round_address(&self) -> String {
         standardize_address(&self.current_round_address)
+    }
+
+    pub fn get_object_address(&self) -> String {
+        standardize_address(&self.object_address)
     }
 
     pub fn from_event(

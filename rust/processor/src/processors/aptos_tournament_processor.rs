@@ -884,12 +884,7 @@ impl ProcessorTrait for AptosTournamentProcessor {
                     )
                     .unwrap()
                     {
-                        create_room_events.insert(
-                            standardize_address(
-                                &event.key.clone().unwrap().account_address.as_ref(),
-                            ),
-                            create_room,
-                        );
+                        create_room_events.insert(create_room.get_object_address(), create_room);
                     }
                     if let Some(player) = TournamentPlayer::delete_player(
                         &self.config.contract_address,
